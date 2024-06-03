@@ -72,7 +72,6 @@ public extension View {
     /// - Returns: A protected view.
     ///
     /// - Warning: This may stop working if Apple changes the view hierarchy in future iOS versions.
-
     func protected(@ViewBuilder content: () -> some View = { EmptyView() }) -> some View {
         ProtectedView {
             self
