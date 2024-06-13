@@ -1,6 +1,8 @@
 # SwiftUI Unscreenshottable 📵
 Protect sensitive content on iOS.
 
+![](demo.gif)
+
 Unscreenshottable can protect your view from:
 
 ### 1. Screenshots
