@@ -29,6 +29,9 @@ struct ProtectedView<Content: View>: UIViewRepresentable {
     @State private var textField: UITextField
     @State private var secureCanvas: UIView?
     @State private var hostingController: UIHostingController<Content>
+    // Just observing size classes allows updateUIView and sizeThatFits to be called when the screen is rotated
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     // @Environment(\.isSceneCaptured) private var isSceneCaptured // since iOS 17
     private var cancellables = Set<AnyCancellable>()
 
@@ -36,6 +39,7 @@ struct ProtectedView<Content: View>: UIViewRepresentable {
         self.options = options
         self.textField = .init()
         self.hostingController = UIHostingController(rootView: content())
+
         textField.isSecureTextEntry = true
         textField.isUserInteractionEnabled = false
 
@@ -63,7 +67,6 @@ struct ProtectedView<Content: View>: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         guard options.contains(.screenshots), secureCanvas == nil else { return }
-
         DispatchQueue.main.async {
             // "Harvest" a canvas view from the secure `TextField`'s view hierarchy.
             if let secureCanvas = textField.canvasView, let view = hostingController.view {
@@ -71,6 +74,13 @@ struct ProtectedView<Content: View>: UIViewRepresentable {
                 secureCanvas.overlay(subview: view)
             }
         }
+    }
+
+    @available(iOS 16.0, *)
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIView, context: Context) -> CGSize? {
+        let size = CGSize(width: proposal.width ?? .infinity, height: proposal.height ?? .infinity)
+        hostingController.view.frame.size = size
+        return size
     }
 }
 
@@ -88,6 +98,7 @@ public extension View {
         ProtectedView(options: options) {
             self
         }
+        .ignoresSafeArea() // allow navigation and tab bar custom backgrounds to work.
         .background(placeholder()) // place the placeholder behind the protected view.
     }
 }
@@ -111,7 +122,7 @@ extension UITextField {
     /// - Warning: This may stop working if Apple changes the view hierarchy in future iOS versions.
     var canvasView: UIView? {
         subviews.first {
-            // iOS 14...                 iOS 15...
+            // iOS 15...                 iOS 14...
             ["_UITextLayoutCanvasView", "_UITextFieldCanvasView"].contains(type(of: $0).description())
         } ?? subviews.first {
             type(of: $0).description().hasSuffix("CanvasView") // speculative attempt for future versions
@@ -120,26 +131,41 @@ extension UITextField {
 }
 
 #if DEBUG
-struct DemoProtectedView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "camera")
-                .foregroundColor(.accentColor)
-            Text("Can you screenshot this?")
-            Spacer().frame(height: 20)
-            Image(systemName: "airplayvideo")
-                .foregroundColor(.accentColor)
-            Text("Can you AirPlay this?")
+/// Demonstrates the `.protected` modifier.
+/// You can try it by dropping `DemoProtectedView()` into your app in DEBUG mode.
+public struct DemoProtectedView: View {
+    public init() {}
+
+    public var body: some View {
+        VStack(spacing: 20) {
+            Label("Can you screenshot this?", systemImage: "camera")
+            Label("Can you AirPlay this?", systemImage: "airplayvideo")
+            Label("Can you see this while task switching?", systemImage: "appwindow.swipe.rectangle")
         }
+        .labelStyle(ItemLabelStyle())
         .imageScale(.large)
+        .font(.title.bold())
         .padding()
         .protected {
             VStack {
-                Text("Sorry").font(.title)
+                Image(systemName: "nosign")
+                    .resizable().scaledToFit()
+                    .foregroundColor(.red)
                 Text("Screenshots and screen sharing are not allowed.")
             }
-            .multilineTextAlignment(.center)
+            .font(.largeTitle.bold())
             .padding()
+        }
+        .multilineTextAlignment(.center)
+    }
+
+    struct ItemLabelStyle: LabelStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            VStack {
+                configuration.icon
+                    .foregroundColor(.accentColor)
+                configuration.title
+            }
         }
     }
 }
